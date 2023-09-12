@@ -14,12 +14,22 @@ import {
   AttachRolePolicyCommand,
 } from "@aws-sdk/client-iam";
 
-const AccountBlacklist = process.env.HAVA_BLACKLIST_ACCOUNT_IDS.split(",").map(
-  (x) => x.toLowerCase().trim()
-);
-const OrgUnitBlacklist = process.env.HAVA_BLACKLIST_OU_IDS.split(",").map((x) =>
-  x.toLowerCase().trim()
-);
+const normalizeId = (id) => id.toLowerCase().trim();
+
+const createLookup = (ids) => {
+  const lookup = {};
+  for (let i = 0, ii = ids.length; i < ii; i++) {
+    lookup[ids[i]] = true;
+  }
+  return lookup;
+};
+
+const AccountBlacklist =
+  process.env.HAVA_BLACKLIST_ACCOUNT_IDS.split(",").map(normalizeId);
+const AccountBlacklistLookup = createLookup(AccountBlacklist);
+const OrgUnitBlacklist =
+  process.env.HAVA_BLACKLIST_OU_IDS.split(",").map(normalizeId);
+const OrgUnitBlacklistLookup = createLookup(OrgUnitBlacklist);
 const HavaAPIEndpoint =
   process.env.HAVA_ENDPOINT.trim() || "https://api.hava.io";
 const HavaCARAccount = process.env.HAVA_CAR_ACCOUNT.trim() || "281013829959";
@@ -42,14 +52,14 @@ export const handler = async (event) => {
 
   const toDelete = await getAccountsToDelete(parsedHavaAccounts, awsAccounts);
 
-  console.log("Hava accounts to delete");
+  console.log((toDelete && toDelete.length) + " Hava accounts to delete:");
   console.log(toDelete);
 
   await deleteHavaAccounts(toDelete);
 
   const toAdd = await getAccountsToAdd(parsedHavaAccounts, awsAccounts);
 
-  console.log("Aws account to add:");
+  console.log((toAdd && toAdd.length) + " AWS accounts to add:");
   console.log(toAdd);
 
   const validAwsAccountsToAdd = await createHavaRole(toAdd);
@@ -64,58 +74,48 @@ const validateConfig = async () => {
 
   if (!HavaCARAccount || isNaN(HavaCARAccount)) {
     errors.push(
-      `Config Error: HAVA_CAR_ACCOUNT environment variable not a valid number, is it set properly? Value: ${HavaCARAccount}`
+      `Config Error: HAVA_CAR_ACCOUNT environment variable not a valid number, is it set properly? Value: ${HavaCARAccount}`,
     );
   }
 
   if (!ExternalId) {
     errors.push(
-      "Config Error: HAVA_EXTERNAL_ID environment variable is missing"
+      "Config Error: HAVA_EXTERNAL_ID environment variable is missing",
     );
   }
 
   if (errors.length > 0) {
-    errors.forEach((x) => console.error(x));
+    errors.forEach((err) => console.error(err));
     throw "Configuration Error, see error messages in log";
   }
 };
 
 const getAccountsToDelete = async (havaAccounts, awsAccounts) => {
-  const toDelete = new Array();
-
-  for (let i = 0; i < havaAccounts.length; i++) {
-    let match = false;
-    for (let x = 0; x < awsAccounts.length; x++) {
-      if (havaAccounts[i].awsAccountId === awsAccounts[x].Id) {
-        match = true;
-        break;
-      }
-    }
-
-    if (!match) {
-      toDelete.push(havaAccounts[i]);
-    }
+  const toDelete = [];
+  const awsAccountsLookup = {};
+  for (let i = 0, ii = awsAccounts.length; i < ii; i++) {
+    const awsAccount = awsAccounts[i];
+    awsAccountsLookup[awsAccount.Id] = true;
   }
-
+  for (let i = 0, ii = havaAccounts.length; i < ii; i++) {
+    const havaAccount = havaAccounts[i];
+    if (!awsAccountsLookup[havaAccount.awsAccountId])
+      toDelete.push(havaAccount);
+  }
   return toDelete;
 };
 
 const getAccountsToAdd = async (havaAccounts, awsAccounts) => {
-  const toAdd = new Array();
-
-  for (let i = 0; i < awsAccounts.length; i++) {
-    let match = false;
-    for (let x = 0; x < havaAccounts.length; x++) {
-      if (awsAccounts[i].Id === havaAccounts[x].awsAccountId) {
-        match = true;
-        break;
-      }
-    }
-    if (!match) {
-      toAdd.push(awsAccounts[i]);
-    }
+  const toAdd = [];
+  const havaAccountsLookup = {};
+  for (let i = 0, ii = havaAccounts.length; i < ii; i++) {
+    const havaAccount = havaAccounts[i];
+    havaAccountsLookup[havaAccount.awsAccountId] = true;
   }
-
+  for (let i = 0, ii = awsAccounts.length; i < ii; i++) {
+    const awsAccount = awsAccounts[i];
+    if (!havaAccountsLookup[awsAccount.Id]) toAdd.push(awsAccount);
+  }
   return toAdd;
 };
 
@@ -137,29 +137,29 @@ const getAWSRootOU = async () => {
 
 const getAWSOrgChildren = async (ouId, accounts) => {
   // Stop parsing branch if org unit is blacklisted
-  if (OrgUnitBlacklist.includes(ouId.toLowerCase())) {
+  if (OrgUnitBlacklistLookup[ouId.toLowerCase()]) {
     return;
   }
 
   const childAccounts = await getAWSChildAccounts(ouId, null);
 
   // Clear out all blacklisted accounts
-  for (let i = 0; i < childAccounts.length; i++) {
-    let x = childAccounts[i];
+  for (let i = 0, ii = childAccounts.length; i < ii; i++) {
+    const childAccount = childAccounts[i];
     if (
-      x.Status.toLowerCase() !== "active" ||
-      AccountBlacklist.includes(x.Id.toLowerCase())
+      childAccount.Status.toLowerCase() !== "active" ||
+      AccountBlacklistLookup[childAccount.Id.toLowerCase()]
     ) {
       continue;
     }
     accounts.push({
-      Name: x.Name,
-      Id: x.Id,
+      Name: childAccount.Name,
+      Id: childAccount.Id,
     });
   }
 
   const childOus = await getAWSChildOus(ouId, null);
-  for (let i = 0; i < childOus.length; i++) {
+  for (let i = 0, ii = childOus.length; i < ii; i++) {
     await getAWSOrgChildren(childOus[i].Id, accounts);
   }
 };
@@ -208,24 +208,22 @@ const getAPIKey = async () => {
     Name: process.env.HAVA_TOKEN_PATH,
     WithDecryption: true,
   };
-
   const command = new GetParameterCommand(input);
-
   const response = await client.send(command);
-
   return response.Parameter.Value;
 };
 
 const parseHavaAccounts = async (accounts) => {
   const accountIds = new Array();
 
-  for (let i = 0; i < accounts.length; i++) {
-    let accountNo = accounts[i].info.split(":")[4];
+  for (let i = 0, ii = accounts.length; i < ii; i++) {
+    const account = accounts[i];
+    let accountNo = account.info.split(":")[4];
     if (!isNaN(accountNo)) {
       accountIds.push({
-        id: accounts[i].id,
+        id: account.id,
         awsAccountId: accountNo,
-        name: accounts[i].name,
+        name: account.name,
       });
     }
   }
@@ -236,11 +234,9 @@ const parseHavaAccounts = async (accounts) => {
 const getHavaAccounts = async (token) => {
   const API_KEY = await getAPIKey();
 
-  let url = "https://api.hava.io/sources?page_size=50";
-
-  if (token) {
-    url += "&token=" + token;
-  }
+  const url = token
+    ? `https://api.hava.io/sources?page_size=50&token=${token}`
+    : "https://api.hava.io/sources?page_size=50";
 
   var options = {
     headers: {
@@ -263,7 +259,7 @@ const getHavaAccounts = async (token) => {
 
   // only care about cross account roles for this
   let accounts = jsonResult.results.filter(
-    (x) => x.type === "Sources::AWS::CrossAccountRole"
+    (x) => x.type === "Sources::AWS::CrossAccountRole",
   );
 
   if (jsonResult.next_page_token) {
@@ -285,8 +281,9 @@ const deleteHavaAccounts = async (accounts) => {
     },
   };
 
-  for (let i = 0; i < accounts.length; i++) {
-    const url = "https://api.hava.io/sources/" + accounts[i].id;
+  for (let i = 0, ii = accounts.length; i < ii; i++) {
+    const account = accounts[i];
+    const url = "https://api.hava.io/sources/" + account.id;
     const res = await fetch(url, options);
 
     if (res.status >= 500) {
@@ -295,10 +292,10 @@ const deleteHavaAccounts = async (accounts) => {
       throw "Authentication error, API key set correctly?";
     } else if (res.status === 404) {
       console.warn(
-        `Account not found '${accounts[i].name}(${accounts[i].id})'. Assumed to be deleted by other process`
+        `Account not found: '${account.name}(${account.id})'. Assumed to be deleted by other process`,
       );
     } else {
-      console.log(`Account '${accounts[i].name}(${accounts[i].id})' deleted`);
+      console.log(`Account '${account.name}(${account.id})' deleted`);
     }
   }
 };
@@ -314,10 +311,11 @@ const addHavaAccounts = async (awsAccounts) => {
   const API_KEY = await getAPIKey();
   const url = HavaAPIEndpoint + "/sources";
 
-  for (let i = 0; i < awsAccounts.length; i++) {
-    const arn = "arn:aws:iam::" + awsAccounts[i].Id + ":role/HavaRo";
+  for (let i = 0, ii = awsAccounts.length; i < ii; i++) {
+    const awsAccount = awsAccounts[i];
+    const arn = "arn:aws:iam::" + awsAccount.Id + ":role/HavaRo";
     const body = {
-      name: awsAccounts[i].Name,
+      name: awsAccount.Name,
       type: "AWS::CrossAccountRole",
       external_id: ExternalId,
       role_arn: arn,
@@ -340,11 +338,11 @@ const addHavaAccounts = async (awsAccounts) => {
       throw "Authentication error, API key set correctly?";
     } else if (res.status === 422) {
       console.warn(
-        `Account '${awsAccounts[i].Name}(${awsAccounts[i].Id})' is already added`
+        `Account '${awsAccount.Name}(${awsAccount.Id})' is already added`,
       );
     } else {
       console.log(
-        `Added account '${awsAccounts[i].Name}(${awsAccounts[i].Id})' to Hava`
+        `Added account '${awsAccount.Name}(${awsAccount.Id})' to Hava`,
       );
     }
   }
@@ -355,14 +353,15 @@ const createHavaRole = async (awsAccounts) => {
 
   console.log("Adding Hava ReadOnly role to AWS accounts");
 
-  for (let i = 0; i < awsAccounts.length; i++) {
+  for (let i = 0, ii = awsAccounts.length; i < ii; i++) {
+    const awsAccount = awsAccounts[i];
     let role;
 
     try {
-      role = await assumeRole(awsAccounts[i].Id);
+      role = await assumeRole(awsAccount.Id);
     } catch (e) {
       console.warn(
-        `Was not able assume role in account '${awsAccounts[i].Name}(${awsAccounts[i].Id})'. Has it not been onboarded to ControlTower?`
+        `Was not able assume role in account '${awsAccount.Name}(${awsAccount.Id})'. Has it not been onboarded to ControlTower?`,
       );
       continue;
     }
@@ -384,7 +383,7 @@ const createHavaRole = async (awsAccounts) => {
     } catch (e) {
       if (e instanceof NoSuchEntityException) {
         console.log(
-          `Creating role in aws account: ${awsAccounts[i].Name} (${awsAccounts[i].Id})`
+          `Creating role in aws account: ${awsAccount.Name} (${awsAccount.Id})`,
         );
         createRORoleInAwsAccount(client);
       } else {
@@ -392,7 +391,7 @@ const createHavaRole = async (awsAccounts) => {
       }
     }
 
-    validAccounts.push(awsAccounts[i]);
+    validAccounts.push(awsAccount);
   }
 
   return validAccounts;
