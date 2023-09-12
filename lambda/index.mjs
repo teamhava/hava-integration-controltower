@@ -190,7 +190,7 @@ const getAWSChildAccounts = async (ouId, nextToken) => {
   if (result.NextToken) {
     // console.log("Found nextToken, diving deeper!")
     const paginatedResult = await getAWSChildAccounts(ouId, result.NextToken);
-    result.Accounts = result.Accounts.concat(paginatedResult.Accounts);
+    result.Accounts = result.Accounts.concat(paginatedResult);
   }
   return result.Accounts;
 };
@@ -209,7 +209,7 @@ const getAWSChildOus = async (ouId, nextToken) => {
   if (result.NextToken) {
     // console.log("Found nextToken, diving deeper!")
     const paginatedResult = await getAWSChildOus(ouId, result.NextToken);
-    result.OrganizationalUnits.concat(paginatedResult.OrganizationalUnits);
+    result.OrganizationalUnits = result.OrganizationalUnits.concat(paginatedResult);
   }
   return result.OrganizationalUnits;
 };
