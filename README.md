@@ -1,3 +1,3 @@
-# controltower Lambda
+# AWS ControlTower Integration
 
-Integration for Control Tower to automatically intragrate controll tower managed accounts with Hava.io
+Integration for AWS Control Tower to automatically intregrate control tower managed accounts with Hava.io
