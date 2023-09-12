@@ -72,9 +72,9 @@ export const handler = async (event) => {
 const validateConfig = async () => {
   const errors = new Array();
 
-  if (!HavaCARAccount || isNaN(HavaCARAccount)) {
+  if (!HavaCARAccount || !HavaCARAccount.match(/\d{12,}/)) {
     errors.push(
-      `Config Error: HAVA_CAR_ACCOUNT environment variable not a valid number, is it set properly? Value: ${HavaCARAccount}`,
+      `Config Error: HAVA_CAR_ACCOUNT environment variable not a valid 12 digit number, is it set properly? Value: ${HavaCARAccount}`,
     );
   }
 
@@ -219,7 +219,9 @@ const parseHavaAccounts = async (accounts) => {
   for (let i = 0, ii = accounts.length; i < ii; i++) {
     const account = accounts[i];
     let accountNo = account.info.split(":")[4];
-    if (!isNaN(accountNo)) {
+
+    // filter out accounts with invalid account numbers
+    if (accountNo.match(/\d{12,}/)) {
       accountIds.push({
         id: account.id,
         awsAccountId: accountNo,
