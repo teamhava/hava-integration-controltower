@@ -24,18 +24,19 @@ const createLookup = (ids) => {
   return lookup;
 };
 
-const AccountBlacklist =
-  process.env.HAVA_BLACKLIST_ACCOUNT_IDS.split(",").map(normalizeId);
-const AccountBlacklistLookup = createLookup(AccountBlacklist);
-const OrgUnitBlacklist =
-  process.env.HAVA_BLACKLIST_OU_IDS.split(",").map(normalizeId);
-const OrgUnitBlacklistLookup = createLookup(OrgUnitBlacklist);
+const AccountBlocklist =
+  (process.env.HAVA_BLOCKLIST_ACCOUNT_IDS || "").split(",").map(normalizeId);
+const AccountBlocklistLookup = createLookup(AccountBlocklist);
+const OrgUnitBlocklist =
+  (process.env.HAVA_BLOCKLIST_OU_IDS || "").split(",").map(normalizeId);
+const OrgUnitBlocklistLookup = createLookup(OrgUnitBlocklist);
 const HavaAPIEndpoint =
-  process.env.HAVA_ENDPOINT.trim() || "https://api.hava.io";
-const HavaCARAccount = process.env.HAVA_CAR_ACCOUNT.trim() || "281013829959";
-const ExternalId = process.env.HAVA_EXTERNAL_ID.trim();
+  (process.env.HAVA_ENDPOINT || "https://api.hava.io").trim();
+const HavaCARAccount = (process.env.HAVA_CAR_ACCOUNT || "281013829959").trim();
+const ExternalId = (process.env.HAVA_EXTERNAL_ID || "").trim();
+const TokenPath = (process.env.HAVA_TOKEN_PATH || "").trim();
 
-export const handler = async (event) => {
+export const handler = async () => {
   await validateConfig();
 
   const havaAccounts = await getHavaAccounts();
@@ -74,13 +75,19 @@ const validateConfig = async () => {
 
   if (!HavaCARAccount || !HavaCARAccount.match(/\d{12,}/)) {
     errors.push(
-      `Config Error: HAVA_CAR_ACCOUNT environment variable not a valid 12 digit number, is it set properly? Value: ${HavaCARAccount}`,
+      `Config Error: HAVA_CAR_ACCOUNT environment variable not a valid 12 digit number, is it set properly? Value: ${HavaCARAccount}`
     );
   }
 
   if (!ExternalId) {
     errors.push(
-      "Config Error: HAVA_EXTERNAL_ID environment variable is missing",
+      "Config Error: HAVA_EXTERNAL_ID environment variable is missing"
+    );
+  }
+
+  if (!TokenPath) {
+    errors.push(
+      "Config Error: HAVA_TOKEN_PATH environment variable is missing"
     );
   }
 
@@ -137,7 +144,7 @@ const getAWSRootOU = async () => {
 
 const getAWSOrgChildren = async (ouId, accounts) => {
   // Stop parsing branch if org unit is blacklisted
-  if (OrgUnitBlacklistLookup[ouId.toLowerCase()]) {
+  if (OrgUnitBlocklistLookup[ouId.toLowerCase()]) {
     return;
   }
 
@@ -148,7 +155,7 @@ const getAWSOrgChildren = async (ouId, accounts) => {
     const childAccount = childAccounts[i];
     if (
       childAccount.Status.toLowerCase() !== "active" ||
-      AccountBlacklistLookup[childAccount.Id.toLowerCase()]
+      AccountBlocklistLookup[childAccount.Id.toLowerCase()]
     ) {
       continue;
     }
@@ -205,7 +212,7 @@ const getAWSChildOus = async (ouId, nextToken) => {
 const getAPIKey = async () => {
   const client = new SSMClient();
   const input = {
-    Name: process.env.HAVA_TOKEN_PATH,
+    Name: TokenPath,
     WithDecryption: true,
   };
   const command = new GetParameterCommand(input);
@@ -339,6 +346,9 @@ const addHavaAccounts = async (awsAccounts) => {
     } else if (res.status === 401) {
       throw "Authentication error, API key set correctly?";
     } else if (res.status === 422) {
+      if(res.statusText === "Requires Payment") {
+        throw "Hava account has run out of usable sources, please contact you billing admin to increase the number of available sources"
+      }
       console.warn(
         `Account '${awsAccount.Name}(${awsAccount.Id})' is already added`,
       );
