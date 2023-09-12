@@ -47,6 +47,7 @@ export const handler = async () => {
   const root = await getAWSRootOU();
   const awsAccounts = new Array();
 
+  console.log("Scanning organisation for accounts");
   await getAWSOrgChildren(root.Id, awsAccounts);
 
   // console.log(awsAccounts);
@@ -143,18 +144,21 @@ const getAWSRootOU = async () => {
 };
 
 const getAWSOrgChildren = async (ouId, accounts) => {
+  
+  console.log(`ou: ${ouId}`);
   // Stop parsing branch if org unit is blacklisted
   if (OrgUnitBlocklistLookup[ouId.toLowerCase()]) {
+    console.log('Skipping ou as it was found in blocklist');
     return;
   }
 
   const childAccounts = await getAWSChildAccounts(ouId, null);
-
+  console.log(`accounts found: ${childAccounts.length}`)
   // Clear out all blacklisted accounts
   for (let i = 0, ii = childAccounts.length; i < ii; i++) {
     const childAccount = childAccounts[i];
     if (
-      !childAccount ||
+      !childAccounts ||
       childAccount.Status.toLowerCase() !== "active" ||
       AccountBlocklistLookup[childAccount.Id.toLowerCase()]
     ) {
