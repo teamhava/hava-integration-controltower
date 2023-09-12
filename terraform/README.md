@@ -1,6 +1,26 @@
-# Hava Control Tower Integration Terraform Tempalte
+# Hava Control Tower Integration Terraform Module
 
-This terraform template deploys a lambda that will scan your aws organisation every 24 hours for new accounts and sync any changes to Hava.io. Making sure that Hava is always up to date with the accounts in your AWS organisation.
+This terraform module deploys a lambda that will scan your aws organisation for new accounts and sync any changes to Hava.io. Making sure that Hava is always up to date with the accounts in your AWS organisation.
+
+The synchronization will happen both on a schedule and every time a new account is created in the AWS vending machine. This is achieved by setting up EventBridge Rules that listens for specific events and triggers the Lambda.
+
+By default all accounts that are managed by Control Tower will be added to Hava. If there is a need for some accounts to be separated a blocklist for both Organizational Units and Individual accounts are available to be configured
+
+The Lambda also relies on the Hava API token being stored in the System Manager Parameter store as a secure string. 
+
+> Note: This is designed to run from the Organization root account, as it relies on premissions only available for resources running in this account to connect to child accounts and add a ReadOnly role for Hava to use
+
+## Example Usage
+
+```hcl
+module "hava_integration" {
+  source = "https://github.com/teamhava/hava-integration-controltower/terraform"
+
+  hava_token_path = "/hava-integration/token"
+  hava_external_id = "0934086b5ab9970105378261249aebd9"
+
+}
+```
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
