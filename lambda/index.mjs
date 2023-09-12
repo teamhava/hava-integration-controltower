@@ -158,7 +158,7 @@ const getAWSOrgChildren = async (ouId, accounts) => {
   for (let i = 0, ii = childAccounts.length; i < ii; i++) {
     const childAccount = childAccounts[i];
     if (
-      !childAccounts ||
+      !childAccount ||
       childAccount.Status.toLowerCase() !== "active" ||
       AccountBlocklistLookup[childAccount.Id.toLowerCase()]
     ) {
