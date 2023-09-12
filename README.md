@@ -1,6 +1,8 @@
 # AWS ControlTower Integration
 
-Integration for AWS Control Tower to automatically synchronize control tower managed accounts with Hava.io
+Integration for AWS Control Tower to automatically synchronize control tower managed aws accounts with Hava.io
+
+It traverses the full Org tree to locate all accounts that are managed by controll tower and configures a read only role in each of the accounts. Then it adds these to Hava.io as data sources to ensure that all AWS accounts can automatically be monitored for change and diagrams automatically generated for all cloud resources deployed.
 
 > Note: This is designed to run from the Organization root account, as it relies on premissions only available for resources running in this account to connect to child accounts and add a ReadOnly role for Hava to use
 

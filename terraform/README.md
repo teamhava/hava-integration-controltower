@@ -14,7 +14,7 @@ The Lambda also relies on the Hava API token being stored in the System Manager 
 
 ```hcl
 module "hava_integration" {
-  source = "<github url>"
+  source = "https://github.com/teamhava/hava-integration-controltower/terraform"
 
   hava_token_path = "/hava-integration/token"
   hava_external_id = "0934086b5ab9970105378261249aebd9"
