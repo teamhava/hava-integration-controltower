@@ -1,24 +1,17 @@
 locals {
-  name       = "HavaIntegration"
   account_id = data.aws_caller_identity.current.account_id
   region     = data.aws_region.current.name
 
-  hava_token_path = "" // path to the HAVA API token in System Manager Parameter store. e.g. /hava-integration/token
-
-  env_variables = {
-    HAVA_BLACKLIST_ACCOUNT_IDS = "" // comma delimited list of aws account ids to ignore
-    HAVA_BLACKLIST_OU_IDS      = "" // comma delimited list of aws org units ids to ignore
-    HAVA_EXTERNAL_ID           = "" // external id used to secure the ReadOnly role Hava use to connect to your AWS accounts
-    HAVA_TOKEN_PATH            = local.hava_token_path
-
-    // only use for self-hosted, ignore if running against SaaS
-    // HAVA_ENDPOINT = "https://api.hava.io" // url of API, change this
-    // HAVA_CAR_ACCOUNT = "" // id of AWS account to use as the CAR account, needs to match the Id of the account which has the CAR role defined
-  }
-
-  tags = {
-    environment = "production"
-  }
+  env_variables = merge(
+    {
+      HAVA_BLOCKLIST_ACCOUNT_IDS = var.hava_blocklist_account_ids
+      HAVA_BLOCKLIST_OU_IDS      = var.hava_blocklist_ou_ids
+      HAVA_EXTERNAL_ID           = var.hava_external_id
+      HAVA_TOKEN_PATH            = var.hava_token_path
+    },
+    var.hava_endpoint != null ? { HAVA_ENDPOINT = var.hava_endpoint } : {},
+    var.hava_car_account != null ? { HAVA_CAR_ACCOUNT = var.hava_car_account } : {}
+  )
 }
 
 terraform {
@@ -53,10 +46,10 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 }
 
 resource "aws_iam_role" "lambda" {
-  name               = "${local.name}-lambda"
+  name               = "${var.name}-lambda"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 
-  tags = local.tags
+  tags = var.tags
 }
 
 data "aws_iam_policy_document" "lambda_access" {
@@ -75,7 +68,7 @@ data "aws_iam_policy_document" "lambda_access" {
       "logs:PutLogEvents"
     ]
     resources = [
-      "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/lambda/${local.name}:*"
+      "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/lambda/${var.name}:*"
     ]
   }
 
@@ -92,7 +85,7 @@ data "aws_iam_policy_document" "lambda_access" {
     actions = [
       "ssm:GetParameter"
     ]
-    resources = ["arn:aws:ssm:${local.region}:${local.account_id}:parameter${local.hava_token_path}"]
+    resources = ["arn:aws:ssm:${local.region}:${local.account_id}:parameter${var.hava_token_path}"]
   }
 
   statement {
@@ -105,10 +98,10 @@ data "aws_iam_policy_document" "lambda_access" {
 }
 
 resource "aws_iam_policy" "lambda" {
-  name   = "${local.name}-lambda"
+  name   = "${var.name}-lambda"
   policy = data.aws_iam_policy_document.lambda_access.json
 
-  tags = local.tags
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "lambda" {
@@ -127,7 +120,7 @@ data "archive_file" "lambda" {
 }
 
 resource "aws_lambda_function" "this" {
-  function_name    = local.name
+  function_name    = var.name
   role             = aws_iam_role.lambda.arn
   runtime          = "nodejs18.x"
   architectures    = ["arm64"]
@@ -135,40 +128,39 @@ resource "aws_lambda_function" "this" {
   filename         = "./temp/function.zip"
   source_code_hash = data.archive_file.lambda.output_base64sha256
   timeout          = 60
+  tags             = var.tags
 
   environment {
     variables = local.env_variables
   }
 
-  tags = local.tags
-
   depends_on = [data.archive_file.lambda]
 }
 
 resource "aws_cloudwatch_event_rule" "schedule" {
-  name = "${local.name}-schedule"
-  description = "Schedule for ${local.name} lambda function"
-  schedule_expression = "rate(24 hours)"
+  name                = "${var.name}-schedule"
+  description         = "Schedule for ${var.name} lambda function"
+  schedule_expression = var.schedule_expression
 }
 
 resource "aws_cloudwatch_event_target" "schedule" {
-  rule = aws_cloudwatch_event_rule.schedule.name
+  rule      = aws_cloudwatch_event_rule.schedule.name
   target_id = "${aws_lambda_function.this.function_name}-schedule"
-  arn = aws_lambda_function.this.arn
+  arn       = aws_lambda_function.this.arn
 }
 
 resource "aws_lambda_permission" "schedule_lambda" {
-  action = "lambda:InvokeFunction"
+  action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.this.function_name
-  principal = "events.amazonaws.com"
-  source_arn = aws_cloudwatch_event_rule.schedule.arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.schedule.arn
 }
 
 resource "aws_cloudwatch_event_rule" "create_account" {
-  name = "${local.name}-create-account"
+  name        = "${var.name}-create-account"
   description = "Run Hava Integration when new AWS accounts are created"
   event_pattern = jsonencode({
-    source = ["aws.controltower"]
+    source      = ["aws.controltower"]
     detail-type = ["AWS Service Event via CloudTrail"]
     detail = {
       eventName = ["CreateManagedAccount", "UpdateManagedAccount"]
@@ -177,14 +169,14 @@ resource "aws_cloudwatch_event_rule" "create_account" {
 }
 
 resource "aws_cloudwatch_event_target" "create_account" {
-  rule = aws_cloudwatch_event_rule.create_account.name
+  rule      = aws_cloudwatch_event_rule.create_account.name
   target_id = "${aws_lambda_function.this.function_name}-create_account"
-  arn = aws_lambda_function.this.arn
+  arn       = aws_lambda_function.this.arn
 }
 
 resource "aws_lambda_permission" "create_account_lambda" {
-  action = "lambda:InvokeFunction"
+  action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.this.function_name
-  principal = "events.amazonaws.com"
-  source_arn = aws_cloudwatch_event_rule.create_account.arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.create_account.arn
 }
