@@ -8,6 +8,7 @@ locals {
       HAVA_BLOCKLIST_OU_IDS      = var.hava_blocklist_ou_ids
       HAVA_EXTERNAL_ID           = var.hava_external_id
       HAVA_TOKEN_PATH            = var.hava_token_path
+      HAVA_DRY_RUN               = var.hava_dry_run
     },
     var.hava_endpoint != null ? { HAVA_ENDPOINT = var.hava_endpoint } : {},
     var.hava_car_account != null ? { HAVA_CAR_ACCOUNT = var.hava_car_account } : {}
@@ -127,7 +128,7 @@ resource "aws_lambda_function" "this" {
   handler          = "index.handler"
   filename         = "./temp/function.zip"
   source_code_hash = data.archive_file.lambda.output_base64sha256
-  timeout          = 60
+  timeout          = 600
   tags             = var.tags
 
   environment {

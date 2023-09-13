@@ -87,3 +87,4 @@ This is the full list of configuration options for the lambda. All configuration
 |HAVA_BLOCKLIST_OU_IDS|No|""|A comma delimeited list of AWS Organisational Unit IDs to be blocked from being added to Hava. Example: "ou-ue1b-37u4fiye,ou-u52c-34u1fpyq"|
 |HAVA_CAR_ACCOUNT|no|"281013829959"|This is used to configure the account used as the base for the CAR role for those that run a self-hosted version of Hava|
 |HAVA_ENDPOINT|no|"https://api.hava.io"|This is used to configure the integration to run against a different Hava instance than the SaaS platform for those that run a self-hosted version of Hava|
+|HAVA_DRY_RUN|no|false|Set to 'true' to run in DryRun mode, which runs through the same process but does not execute any write commands against AWS or Hava|
