@@ -35,22 +35,23 @@ const HavaAPIEndpoint =
 const HavaCARAccount = (process.env.HAVA_CAR_ACCOUNT || "281013829959").trim();
 const ExternalId = (process.env.HAVA_EXTERNAL_ID || "").trim();
 const TokenPath = (process.env.HAVA_TOKEN_PATH || "").trim();
+const DryRun = (process.env.HAVA_DRY_RUN || "false").trim().toLowerCase() === "true";
 
 export const handler = async () => {
   await validateConfig();
 
+  if (DryRun) {
+    console.log("Running in DryRun Mode, will not execute any write commands against AWS or Hava");
+  }
+
   const havaAccounts = await getHavaAccounts();
   const parsedHavaAccounts = await parseHavaAccounts(havaAccounts);
-
-  // console.log(parsedHavaAccounts);
 
   const root = await getAWSRootOU();
   const awsAccounts = new Array();
 
   console.log("Scanning organisation for accounts");
   await getAWSOrgChildren(root.Id, awsAccounts);
-
-  // console.log(awsAccounts);
 
   const toDelete = await getAccountsToDelete(parsedHavaAccounts, awsAccounts);
 
@@ -68,7 +69,7 @@ export const handler = async () => {
 
   await addHavaAccounts(validAwsAccountsToAdd);
 
-  return "Wooo";
+  return "Success";
 };
 
 const validateConfig = async () => {
@@ -238,6 +239,7 @@ const parseHavaAccounts = async (accounts) => {
         id: account.id,
         awsAccountId: accountNo,
         name: account.name,
+        roleArn: account.info
       });
     }
   }
@@ -297,6 +299,12 @@ const deleteHavaAccounts = async (accounts) => {
 
   for (let i = 0, ii = accounts.length; i < ii; i++) {
     const account = accounts[i];
+
+    if (DryRun) {
+      console.log(`DryRun: Account '${account.name}(${account.id})' deleted`)
+      continue;
+    }
+
     const url = "https://api.hava.io/sources/" + account.id;
     const res = await fetch(url, options);
 
@@ -327,7 +335,13 @@ const addHavaAccounts = async (awsAccounts) => {
 
   for (let i = 0, ii = awsAccounts.length; i < ii; i++) {
     const awsAccount = awsAccounts[i];
-    const arn = "arn:aws:iam::" + awsAccount.Id + ":role/HavaRo";
+
+    if (DryRun) {
+      console.log(`DryRun: Added account '${awsAccount.Name}(${awsAccount.Id})' to Hava`)
+      continue;
+    }
+
+    const arn = "arn:aws:iam::" + awsAccount.Id + ":role/HavaRO";
     const body = {
       name: awsAccount.Name,
       type: "AWS::CrossAccountRole",
@@ -380,6 +394,12 @@ const createHavaRole = async (awsAccounts) => {
       console.warn(
         `Was not able assume role in account '${awsAccount.Name}(${awsAccount.Id})'. Has it not been onboarded to ControlTower?`,
       );
+      continue;
+    }
+
+    if (DryRun) {
+      console.log(`DryRun: Creating role in aws account: ${awsAccount.Name}(${awsAccount.Id})`);
+      validAccounts.push(awsAccount);
       continue;
     }
 

@@ -38,6 +38,12 @@ variable "hava_token_path" {
   type        = string
 }
 
+variable "hava_dry_run" {
+  description = "Deploys Lambda in DryRun mode, where it will not write to any AWS or Hava endpoints but print out log entries instead"
+  type        = string
+  default     = "false"
+}
+
 variable "tags" {
   description = "Map of Tags to apply to all resources"
   type        = map(string)

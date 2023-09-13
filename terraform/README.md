@@ -65,6 +65,7 @@ module "hava_integration" {
 | <a name="input_hava_blocklist_account_ids"></a> [hava\_blocklist\_account\_ids](#input\_hava\_blocklist\_account\_ids) | Comma delimited list of AWS account IDs to ignore | `string` | `""` | no |
 | <a name="input_hava_blocklist_ou_ids"></a> [hava\_blocklist\_ou\_ids](#input\_hava\_blocklist\_ou\_ids) | Comma delimited list of AWS Org Unit IDs to ignore | `string` | `""` | no |
 | <a name="input_hava_car_account"></a> [hava\_car\_account](#input\_hava\_car\_account) | AWS Account ID to use for the Cross Account Role (CAR), this needs to match the ID of the account which has the CAR role defined. Only use for self-hosted, ignore if running against SaaS | `string` | `null` | no |
+| <a name="input_hava_dry_run"></a> [hava\_dry\_run](#input\_hava\_dry\_run) | Deploys Lambda in DryRun mode, where it will not write to any AWS or Hava endpoints but print out log entries instead | `string` | `"false"` | no |
 | <a name="input_hava_endpoint"></a> [hava\_endpoint](#input\_hava\_endpoint) | URL of Hava API. Only use for self-hosted, ignore if running against SaaS | `string` | `null` | no |
 | <a name="input_hava_external_id"></a> [hava\_external\_id](#input\_hava\_external\_id) | External ID used to secure the ReadOnly role Hava use to connect to your AWS accounts | `string` | n/a | yes |
 | <a name="input_hava_token_path"></a> [hava\_token\_path](#input\_hava\_token\_path) | Path to the HAVA API token in System Manager Parameter store. e.g. /hava-integration/token | `string` | n/a | yes |
